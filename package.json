@@ -1,10 +1,26 @@
 {
   "name": "polly",
   "version": "0.0.1",
-  "description": "",
-  "author": "",
+  "description": "Telegram bot that creates game night polls through a button menu, with moods, saved chats, locations and times.",
+  "author": "Colin Timofei",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TimofeiColin/polly.git"
+  },
+  "homepage": "https://github.com/TimofeiColin/polly#readme",
+  "bugs": {
+    "url": "https://github.com/TimofeiColin/polly/issues"
+  },
+  "keywords": [
+    "telegram",
+    "telegram-bot",
+    "polls",
+    "nestjs",
+    "grammy",
+    "typescript"
+  ],
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -12,7 +28,11 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "lint": "eslint \"src/**/*.ts\" --fix"
+    "lint": "eslint \"src/**/*.ts\" --fix",
+    "pm2:start": "pm2 startOrRestart ecosystem.config.js",
+    "pm2:deploy": "npm run build && npm run pm2:start",
+    "pm2:list": "pm2 ls",
+    "pm2:stop": "pm2 stop polly"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

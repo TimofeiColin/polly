@@ -9,6 +9,7 @@ import { SERIOUS_MOOD } from './serious.mood';
 import { SHY_MOOD } from './shy.mood';
 
 export * from './poll-mood';
+export * from './poll-when';
 
 export const MOODS: readonly PollMoodDefinition[] = [
   SHY_MOOD,
