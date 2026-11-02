@@ -1,25 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CallbackQueryContext, Context } from 'grammy';
-import { PollText } from '../moods';
-import { ChatStoreService } from './chat-store.service';
-import { LocationService } from './location.service';
-import { PollSenderService } from './poll-sender.service';
-import { TimeService } from './time.service';
-import { wallClockStamp } from './wall-clock';
+import { PollText } from '../../moods';
+import { ChatStoreService } from '../../telegram/chat-store.service';
+import { LocationService } from '../../telegram/location.service';
+import { TimeService } from '../../telegram/time.service';
+import { wallClockStamp } from '../../telegram/wall-clock';
+import { PollChoices, PollMenuData, PollTarget, findLocation, findTarget } from '../poll-menu/poll-choices';
 import {
   CANCEL_STEP,
   POLL_FLOW,
-  PollMenuData,
-  PollTarget,
   SEND_STEP,
   buildPoll,
-  describeSteps,
-  findLocation,
-  findTarget,
-  parseSteps,
+  describeChoices,
+  parseChoices,
+  parseValues,
   renderPollMenu,
-} from './poll-menu';
+} from '../poll-menu/poll-menu';
+import { PollSenderService } from './poll-sender.service';
 
 export interface PreparedPoll {
   readonly target: PollTarget;
@@ -64,44 +62,43 @@ export class PollCommandService {
   async handleMenuStep(ctx: CallbackQueryContext<Context>): Promise<void> {
     await ctx.answerCallbackQuery();
 
-    const steps = parseSteps(ctx.callbackQuery.data);
+    const values = parseValues(ctx.callbackQuery.data);
 
-    if (steps[0] === CANCEL_STEP) {
+    if (values[0] === CANCEL_STEP) {
       await ctx.editMessageText('Ну и ладно 😝');
       return;
     }
 
-    if (steps.at(-1) === SEND_STEP) {
-      await this.publishPoll(ctx, steps.slice(0, -2), steps.at(-2) ?? '');
+    if (values.at(-1) === SEND_STEP) {
+      await this.publishPoll(ctx, parseChoices(values.slice(0, -2), POLL_FLOW), values.at(-2) ?? '');
       return;
     }
 
-    const { text, keyboard } = renderPollMenu(steps, this.getMenuData(), POLL_FLOW);
+    const { text, keyboard } = renderPollMenu(values, this.getMenuData(), POLL_FLOW);
 
     await ctx.editMessageText(text, { reply_markup: keyboard });
   }
 
   async preparePoll(
     ctx: CallbackQueryContext<Context>,
-    steps: string[],
+    choices: PollChoices,
     variant: string,
   ): Promise<PreparedPoll | undefined> {
-    const [target, , , , , location] = steps;
     const data = this.getMenuData();
-    const summary = describeSteps(steps, data);
-    const pollTarget = findTarget(data.targets, target);
+    const summary = describeChoices(choices, data);
+    const pollTarget = findTarget(data.targets, choices.target);
 
     if (!pollTarget) {
       await ctx.editMessageText(`${summary}\n\nЭтого чата больше нет в списке 🤷`);
       return undefined;
     }
 
-    if (!findLocation(data.locations, location)) {
+    if (!findLocation(data.locations, choices.location)) {
       await ctx.editMessageText(`${summary}\n\nЭтого места больше нет в списке 🤷`);
       return undefined;
     }
 
-    return { target: pollTarget, poll: buildPoll(steps, variant, data), summary };
+    return { target: pollTarget, poll: buildPoll(choices, variant, data), summary };
   }
 
   getMenuData(): PollMenuData {
@@ -113,8 +110,8 @@ export class PollCommandService {
     };
   }
 
-  private async publishPoll(ctx: CallbackQueryContext<Context>, steps: string[], variant: string): Promise<void> {
-    const prepared = await this.preparePoll(ctx, steps, variant);
+  private async publishPoll(ctx: CallbackQueryContext<Context>, choices: PollChoices, variant: string): Promise<void> {
+    const prepared = await this.preparePoll(ctx, choices, variant);
 
     if (!prepared) {
       return;

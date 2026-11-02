@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { dataFilePath, readJsonArray, writeJsonArray } from './json-file';
+import { dataFilePath, readJsonArray, writeJsonArray } from '../../telegram/json-file';
 
 export interface ScheduledPoll {
   readonly id: number;

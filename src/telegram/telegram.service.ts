@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { Bot, BotError, Context, GrammyError } from 'grammy';
 import { ChatTrackerService } from './chat-tracker.service';
 import { LocationService } from './location.service';
-import { POLL_FLOW, SCHEDULE_FLOW, flowCallback } from './poll-menu';
-import { PollCommandService } from './poll-command.service';
-import { SCHEDULE_LIST_CALLBACK, ScheduleCommandService } from './schedule-command.service';
+import { PollCommandService } from '../commands/poll/poll-command.service';
+import { POLL_FLOW, SCHEDULE_FLOW, flowCallback } from '../commands/poll-menu/poll-menu';
+import { SCHEDULE_LIST_CALLBACK, ScheduleCommandService } from '../commands/schedule/schedule-command.service';
 import { TimeService } from './time.service';
 
 const HELP_TEXT = [

@@ -95,14 +95,12 @@ Saved chats, locations, times and scheduled polls are JSON files in `data/`: `ch
 ```text
 src/
 ├── moods/                         Mood texts and poll text generation
+├── commands/
+│   ├── poll/                      Poll flow and sending
+│   ├── poll-menu/                 Menu steps, choices and rendering
+│   └── schedule/                  Scheduling flow, storage and hourly check
 └── telegram/
     ├── telegram.service.ts        Bot startup and command routing
-    ├── poll-command.service.ts    Poll menu flow and sending
-    ├── poll-menu.ts               Menu steps, text and buttons
-    ├── poll-sender.service.ts     Sending polls, shared by both flows
-    ├── schedule-command.service.ts  /schedule and /schedules
-    ├── schedule-store.service.ts  Saved scheduled polls
-    ├── scheduler.service.ts       Hourly check that posts due polls
     ├── chat-tracker.service.ts    Membership, rename and upgrade events
     ├── chat-store.service.ts      Saved chats
     ├── editable-list.service.ts   Shared list, menu and add logic

@@ -1,16 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { CallbackQueryContext, Context, InlineKeyboard } from 'grammy';
-import { PollCommandService } from './poll-command.service';
+import { PollCommandService } from '../poll/poll-command.service';
+import { PollChoices, formatStamp, getGameAt, getPostAt } from '../poll-menu/poll-choices';
 import {
   CANCEL_STEP,
   SCHEDULE_FLOW,
   SEND_STEP,
-  formatStamp,
-  getGameAt,
-  getPostAt,
-  parseSteps,
+  parseChoices,
+  parseValues,
   renderPollMenu,
-} from './poll-menu';
+} from '../poll-menu/poll-menu';
 import { ScheduleStoreService, ScheduledPoll } from './schedule-store.service';
 
 const LIST_PREFIX = 'planned';
@@ -38,19 +37,19 @@ export class ScheduleCommandService {
   async handleMenuStep(ctx: CallbackQueryContext<Context>): Promise<void> {
     await ctx.answerCallbackQuery();
 
-    const steps = parseSteps(ctx.callbackQuery.data);
+    const values = parseValues(ctx.callbackQuery.data);
 
-    if (steps[0] === CANCEL_STEP) {
+    if (values[0] === CANCEL_STEP) {
       await ctx.editMessageText('Ну и ладно 😝');
       return;
     }
 
-    if (steps.at(-1) === SEND_STEP) {
-      await this.schedulePoll(ctx, steps.slice(0, -2), steps.at(-2) ?? '');
+    if (values.at(-1) === SEND_STEP) {
+      await this.schedulePoll(ctx, parseChoices(values.slice(0, -2), SCHEDULE_FLOW), values.at(-2) ?? '');
       return;
     }
 
-    const { text, keyboard } = renderPollMenu(steps, this.pollCommand.getMenuData(), SCHEDULE_FLOW);
+    const { text, keyboard } = renderPollMenu(values, this.pollCommand.getMenuData(), SCHEDULE_FLOW);
 
     await ctx.editMessageText(text, { reply_markup: keyboard });
   }
@@ -60,7 +59,7 @@ export class ScheduleCommandService {
   }
 
   async handleListStep(ctx: CallbackQueryContext<Context>): Promise<void> {
-    const [step, action] = parseSteps(ctx.callbackQuery.data);
+    const [step, action] = parseValues(ctx.callbackQuery.data);
 
     if (step === CLOSE_STEP) {
       await ctx.answerCallbackQuery();
@@ -88,16 +87,16 @@ export class ScheduleCommandService {
     await ctx.editMessageText(this.listText(), { reply_markup: this.listKeyboard() });
   }
 
-  private async schedulePoll(ctx: CallbackQueryContext<Context>, steps: string[], variant: string): Promise<void> {
-    const prepared = await this.pollCommand.preparePoll(ctx, steps, variant);
+  private async schedulePoll(ctx: CallbackQueryContext<Context>, choices: PollChoices, variant: string): Promise<void> {
+    const prepared = await this.pollCommand.preparePoll(ctx, choices, variant);
 
     if (!prepared) {
       return;
     }
 
     const { target, poll, summary } = prepared;
-    const postAt = getPostAt(steps);
-    const gameAt = getGameAt(steps);
+    const postAt = getPostAt(choices);
+    const gameAt = getGameAt(choices);
 
     if (postAt <= this.pollCommand.getMenuData().now || postAt >= gameAt) {
       await ctx.editMessageText(`${summary}\n\nЭто время уже не подходит, начни заново: /schedule`);

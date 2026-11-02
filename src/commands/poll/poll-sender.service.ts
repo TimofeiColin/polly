@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Bot, GrammyError } from 'grammy';
-import { ChatStoreService } from './chat-store.service';
+import { ChatStoreService } from '../../telegram/chat-store.service';
 
 const POLL_SETTINGS = {
   is_anonymous: false,

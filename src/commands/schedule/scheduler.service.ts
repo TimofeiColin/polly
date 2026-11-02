@@ -1,10 +1,10 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Bot } from 'grammy';
-import { formatStamp } from './poll-menu';
-import { PollSenderService } from './poll-sender.service';
+import { wallClockStamp } from '../../telegram/wall-clock';
+import { PollSenderService } from '../poll/poll-sender.service';
+import { formatStamp } from '../poll-menu/poll-choices';
 import { ScheduleStoreService, ScheduledPoll } from './schedule-store.service';
-import { wallClockStamp } from './wall-clock';
 
 const HOUR_MS = 60 * 60 * 1000;
 const CHECK_DELAY_MS = 1000;

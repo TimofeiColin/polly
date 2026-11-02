@@ -4,11 +4,11 @@ import { Bot } from 'grammy';
 import { ChatStoreService } from './chat-store.service';
 import { ChatTrackerService } from './chat-tracker.service';
 import { LocationService } from './location.service';
-import { PollCommandService } from './poll-command.service';
-import { PollSenderService } from './poll-sender.service';
-import { ScheduleCommandService } from './schedule-command.service';
-import { ScheduleStoreService } from './schedule-store.service';
-import { SchedulerService } from './scheduler.service';
+import { PollCommandService } from '../commands/poll/poll-command.service';
+import { PollSenderService } from '../commands/poll/poll-sender.service';
+import { ScheduleCommandService } from '../commands/schedule/schedule-command.service';
+import { ScheduleStoreService } from '../commands/schedule/schedule-store.service';
+import { SchedulerService } from '../commands/schedule/scheduler.service';
 import { TimeService } from './time.service';
 import { TelegramService } from './telegram.service';
 
