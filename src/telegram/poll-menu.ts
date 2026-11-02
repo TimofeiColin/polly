@@ -25,17 +25,18 @@ const SIZE_LABELS: Record<PollSize, string> = {
   minimal: 'Минимальный (2 варианта)',
 };
 
-const CALLBACK_PREFIX = 'poll';
 export const CANCEL_STEP = 'cancel';
-export const SEND_STEP = 'send';
-export const POLL_CALLBACK = new RegExp(`^${CALLBACK_PREFIX}(?::.+)?$`);
+export const SEND_STEP = 's';
 
 const DAYS_AHEAD = 6;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const POST_HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
 
 export interface PollMenuData {
   readonly targets: readonly PollTarget[];
   readonly times: readonly ListItem[];
   readonly locations: readonly ListItem[];
+  readonly now: string;
 }
 
 export interface PollMenu {
@@ -50,12 +51,21 @@ interface MenuButton {
 
 interface MenuStep {
   readonly prompt: string;
-  readonly buttons: (data: PollMenuData) => MenuButton[];
+  readonly buttons: (data: PollMenuData, steps: string[]) => MenuButton[];
   readonly perRow: number;
   readonly emptyPrompt?: string;
 }
 
-const callbackData = (...steps: string[]): string => [CALLBACK_PREFIX, ...steps].join(':');
+export interface PollFlow {
+  readonly prefix: string;
+  readonly steps: readonly MenuStep[];
+  readonly confirmPrompt: string;
+  readonly confirmLabel: string;
+}
+
+const callbackData = ({ prefix }: PollFlow, ...steps: string[]): string => [prefix, ...steps].join(':');
+
+export const flowCallback = ({ prefix }: PollFlow): RegExp => new RegExp(`^${prefix}(?::.+)?$`);
 
 export const parseSteps = (data: string): string[] => data.split(':').slice(1);
 
@@ -77,8 +87,8 @@ const moodButtons = (): MenuButton[] => [
   { label: '🎲 Сюрприз', value: RANDOM_MOOD },
 ];
 
-const dayButtons = (): MenuButton[] => {
-  const today = new Date();
+const dayButtons = ({ now }: PollMenuData): MenuButton[] => {
+  const today = parseDay(now.slice(0, 8));
 
   return Array.from({ length: DAYS_AHEAD }, (_, offset) => {
     const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset + 1);
@@ -92,6 +102,34 @@ const timeButtons = ({ times }: PollMenuData): MenuButton[] =>
 
 const locationButtons = ({ locations }: PollMenuData): MenuButton[] =>
   locations.map(({ id, name }) => ({ label: name, value: String(id) }));
+
+const postDay = (day: string, daysBefore: string): Date => {
+  const game = parseDay(day);
+
+  return new Date(game.getFullYear(), game.getMonth(), game.getDate() - Number(daysBefore));
+};
+
+const postStamp = (day: string, daysBefore: string, hour: string): string =>
+  `${encodeDay(postDay(day, daysBefore))}${hour}00`;
+
+const availablePostHours = (now: string, [, , , day, time]: string[], daysBefore: string): string[] =>
+  POST_HOURS.map((hour) => String(hour).padStart(2, '0')).filter((hour) => {
+    const stamp = postStamp(day, daysBefore, hour);
+
+    return stamp > now && stamp < `${day}${time}`;
+  });
+
+const postDayButtons = ({ now }: PollMenuData, steps: string[]): MenuButton[] => {
+  const day = steps[3];
+  const daysUntilGame = Math.round((parseDay(day).getTime() - parseDay(now.slice(0, 8)).getTime()) / DAY_MS);
+
+  return Array.from({ length: daysUntilGame + 1 }, (_, offset) => String(daysUntilGame - offset))
+    .filter((daysBefore) => availablePostHours(now, steps, daysBefore).length)
+    .map((daysBefore) => ({ label: formatShortDate(postDay(day, daysBefore)), value: daysBefore }));
+};
+
+const postHourButtons = ({ now }: PollMenuData, steps: string[]): MenuButton[] =>
+  availablePostHours(now, steps, steps[6]).map((hour) => ({ label: `${hour}:00`, value: hour }));
 
 const MENU_STEPS: MenuStep[] = [
   { prompt: 'Куда отправить опрос?', buttons: targetButtons, perRow: 2 },
@@ -112,13 +150,46 @@ const MENU_STEPS: MenuStep[] = [
   },
 ];
 
+export const POLL_FLOW: PollFlow = {
+  prefix: 'poll',
+  steps: MENU_STEPS,
+  confirmPrompt: 'Отправляем?',
+  confirmLabel: '✅ Отправить',
+};
+
+export const SCHEDULE_FLOW: PollFlow = {
+  prefix: 'sch',
+  steps: [
+    ...MENU_STEPS,
+    {
+      prompt: 'В какой день опубликовать опрос?',
+      buttons: postDayButtons,
+      perRow: 2,
+      emptyPrompt: 'До игры не осталось подходящего времени для публикации',
+    },
+    { prompt: 'Во сколько опубликовать опрос?', buttons: postHourButtons, perRow: 4 },
+  ],
+  confirmPrompt: 'Планируем?',
+  confirmLabel: '⏰ Запланировать',
+};
+
+export const formatStamp = (stamp: string): string =>
+  `${formatShortDate(parseDay(stamp.slice(0, 8)))}, ${formatTime(stamp.slice(8, 12))}`;
+
+export const getGameAt = ([, , , day, time]: string[]): string => `${day}${time}`;
+
+export const getPostAt = ([, , , day, , , daysBefore, hour]: string[]): string => postStamp(day, daysBefore, hour);
+
 export const findTarget = (targets: readonly PollTarget[], step: string): PollTarget | undefined =>
   targets.find(({ chatId }) => String(chatId) === step);
 
 export const findLocation = (locations: readonly ListItem[], step: string): ListItem | undefined =>
   locations.find(({ id }) => String(id) === step);
 
-export const describeSteps = ([target, size, mood, day, time, location]: string[], data: PollMenuData): string =>
+export const describeSteps = (
+  [target, size, mood, day, time, location, daysBefore, hour]: string[],
+  data: PollMenuData,
+): string =>
   [
     target && `Чат: ${findTarget(data.targets, target)?.title ?? target}`,
     size && `Формат: ${SIZE_LABELS[size as PollSize]}`,
@@ -126,11 +197,13 @@ export const describeSteps = ([target, size, mood, day, time, location]: string[
     day && `День: ${formatShortDate(parseDay(day))}`,
     time && `Время: ${formatTime(time)}`,
     location && `Место: ${findLocation(data.locations, location)?.name ?? 'удалено'}`,
+    daysBefore && `День публикации: ${formatShortDate(postDay(day, daysBefore))}`,
+    hour && `Время публикации: ${hour}:00`,
   ]
     .filter(Boolean)
     .join('\n');
 
-export const buildPoll = ([, size, , day, time, location, variant]: string[], data: PollMenuData): PollText => {
+export const buildPoll = ([, size, , day, time, location]: string[], variant: string, data: PollMenuData): PollText => {
   const when = createPollWhen(parseDay(day), formatTime(time));
   const { question, options } = buildPollText(MOODS, decodePollVariant(variant), size as PollSize, when);
 
@@ -140,39 +213,40 @@ export const buildPoll = ([, size, , day, time, location, variant]: string[], da
   };
 };
 
-const addNavigation = (keyboard: InlineKeyboard, steps: string[]): InlineKeyboard => {
+const addNavigation = (keyboard: InlineKeyboard, steps: string[], flow: PollFlow): InlineKeyboard => {
   if (steps.length) {
-    keyboard.text('⬅️ Назад', callbackData(...steps.slice(0, -1)));
+    keyboard.text('⬅️ Назад', callbackData(flow, ...steps.slice(0, -1)));
   }
 
-  return keyboard.text('✖️ Отмена', callbackData(CANCEL_STEP));
+  return keyboard.text('✖️ Отмена', callbackData(flow, CANCEL_STEP));
 };
 
-export const renderPollMenu = (steps: string[], data: PollMenuData): PollMenu => {
+export const renderPollMenu = (steps: string[], data: PollMenuData, flow: PollFlow): PollMenu => {
   const summary = describeSteps(steps, data);
-  const menuStep = MENU_STEPS[steps.length];
+  const menuStep = flow.steps[steps.length];
 
   if (!menuStep) {
     const [, size, mood] = steps;
     const moodIndex = mood === RANDOM_MOOD ? undefined : Number(mood);
     const variant = encodePollVariant(createPollVariant(MOODS, moodIndex, size as PollSize));
-    const { question, options } = buildPoll([...steps, variant], data);
+    const { question, options } = buildPoll(steps, variant, data);
     const preview = [question, '', ...options.map((option) => `▫️ ${option}`)].join('\n');
 
     return {
-      text: `${summary}\n\nТак будет выглядеть опрос:\n\n${preview}\n\nОтправляем?`,
+      text: `${summary}\n\nТак будет выглядеть опрос:\n\n${preview}\n\n${flow.confirmPrompt}`,
       keyboard: addNavigation(
         new InlineKeyboard()
-          .text('✅ Отправить', callbackData(...steps, variant, SEND_STEP))
+          .text(flow.confirmLabel, callbackData(flow, ...steps, variant, SEND_STEP))
           .row()
-          .text('🎲 Другой текст', callbackData(...steps))
+          .text('🎲 Другой текст', callbackData(flow, ...steps))
           .row(),
         steps,
+        flow,
       ),
     };
   }
 
-  const buttons = menuStep.buttons(data);
+  const buttons = menuStep.buttons(data, steps);
   const prompt = buttons.length ? menuStep.prompt : (menuStep.emptyPrompt ?? menuStep.prompt);
   const keyboard = new InlineKeyboard();
 
@@ -181,11 +255,11 @@ export const renderPollMenu = (steps: string[], data: PollMenuData): PollMenu =>
       keyboard.row();
     }
 
-    keyboard.text(label, callbackData(...steps, value));
+    keyboard.text(label, callbackData(flow, ...steps, value));
   });
 
   return {
     text: summary ? `${summary}\n\n${prompt}` : prompt,
-    keyboard: addNavigation(buttons.length ? keyboard.row() : keyboard, steps),
+    keyboard: addNavigation(buttons.length ? keyboard.row() : keyboard, steps, flow),
   };
 };

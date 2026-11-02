@@ -3,14 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { Bot, BotError, Context, GrammyError } from 'grammy';
 import { ChatTrackerService } from './chat-tracker.service';
 import { LocationService } from './location.service';
-import { POLL_CALLBACK } from './poll-menu';
+import { POLL_FLOW, SCHEDULE_FLOW, flowCallback } from './poll-menu';
 import { PollCommandService } from './poll-command.service';
+import { SCHEDULE_LIST_CALLBACK, ScheduleCommandService } from './schedule-command.service';
 import { TimeService } from './time.service';
 
 const HELP_TEXT = [
   'Вот что я умею:',
   '',
   '/настолки или /nastolki — создать опрос: чат, формат, стиль, день, время и место',
+  '/schedule — запланировать опрос на выбранные день и час',
+  '/schedules — показать запланированные опросы и удалить ненужные',
   '/locations — показать места и удалить ненужные',
   '/addlocation название — добавить место',
   '/times — показать время и удалить ненужное',
@@ -27,21 +30,20 @@ const cyrillicCommand = (name: string) => new RegExp(`^/${name}(?:\\s+(.+))?$`, 
 @Injectable()
 export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TelegramService.name);
-  private readonly bot: Bot;
 
   private readonly ctrlChatId: number;
 
   constructor(
     private readonly configService: ConfigService,
+    private readonly bot: Bot,
     private readonly chatTracker: ChatTrackerService,
     private readonly locationService: LocationService,
     private readonly timeService: TimeService,
     private readonly pollCommand: PollCommandService,
+    private readonly scheduleCommand: ScheduleCommandService,
   ) {
-    const token = this.configService.getOrThrow<string>('TELEGRAM_BOT_TOKEN');
     this.ctrlChatId = Number(this.configService.getOrThrow<string>('CTRL_CHAT_ID'));
 
-    this.bot = new Bot(token);
     this.registerHandlers();
   }
 
@@ -75,10 +77,16 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       await ctx.reply(HELP_TEXT);
     });
 
+    allowed.command('chats', (ctx) => this.pollCommand.listChats(ctx));
+
     allowed.hears(cyrillicCommand('настолки'), (ctx) => this.pollCommand.openMenu(ctx));
     allowed.command('nastolki', (ctx) => this.pollCommand.openMenu(ctx));
-    allowed.command('chats', (ctx) => this.pollCommand.listChats(ctx));
-    allowed.callbackQuery(POLL_CALLBACK, (ctx) => this.pollCommand.handleMenuStep(ctx));
+    allowed.callbackQuery(flowCallback(POLL_FLOW), (ctx) => this.pollCommand.handleMenuStep(ctx));
+
+    allowed.command('schedule', (ctx) => this.scheduleCommand.openMenu(ctx));
+    allowed.callbackQuery(flowCallback(SCHEDULE_FLOW), (ctx) => this.scheduleCommand.handleMenuStep(ctx));
+    allowed.command('schedules', (ctx) => this.scheduleCommand.openList(ctx));
+    allowed.callbackQuery(SCHEDULE_LIST_CALLBACK, (ctx) => this.scheduleCommand.handleListStep(ctx));
 
     allowed.command('locations', (ctx) => this.locationService.openMenu(ctx));
     allowed.callbackQuery(this.locationService.callbackPattern, (ctx) => this.locationService.handleMenuStep(ctx));
